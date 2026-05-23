@@ -1,0 +1,86 @@
+services:
+  # ============================================================
+  # PostgreSQL 16 con extensión pgvector
+  # En producción esto se reemplaza por AWS RDS PostgreSQL
+  # ============================================================
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: agente-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-agente_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-agente_password}
+      POSTGRES_DB: ${POSTGRES_DB:-agente_db}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./backend/db/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-agente_user} -d ${POSTGRES_DB:-agente_db}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - agente-net
+
+  # ============================================================
+  # Ollama - LLM local
+  # Para usarlo: docker exec -it agente-ollama ollama pull llama3.2:3b
+  # ============================================================
+  ollama:
+    image: ollama/ollama:latest
+    container_name: agente-ollama
+    restart: unless-stopped
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+    networks:
+      - agente-net
+    # Si tienes GPU NVIDIA disponible, descomenta este bloque:
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: all
+    #           capabilities: [gpu]
+
+  # ============================================================
+  # Backend FastAPI
+  # En Milestone 1 solo expone /health; se irá expandiendo.
+  # ============================================================
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: agente-backend
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
+    environment:
+      # Sobrescribe DATABASE_URL para usar el hostname del servicio Docker
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-agente_user}:${POSTGRES_PASSWORD:-agente_password}@postgres:5432/${POSTGRES_DB:-agente_db}
+      OLLAMA_BASE_URL: http://ollama:11434
+    depends_on:
+      postgres:
+        condition: service_healthy
+      ollama:
+        condition: service_started
+    volumes:
+      - ./backend:/app
+    networks:
+      - agente-net
+
+volumes:
+  postgres_data:
+    driver: local
+  ollama_data:
+    driver: local
+
+networks:
+  agente-net:
+    driver: bridge
