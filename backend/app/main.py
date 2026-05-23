@@ -1,9 +1,8 @@
 """
 Entrypoint de la aplicación FastAPI.
 
-Milestone 1: solo expone un endpoint /health para validar que la app
-arranca correctamente. La lógica de negocio se irá agregando en los
-siguientes milestones.
+Milestone 2: ahora hay conexión a Postgres y endpoints /health/db y
+/health/pgvector. El engine se prueba al arrancar y se cierra al apagar.
 """
 
 import logging
@@ -11,8 +10,11 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from sqlalchemy import text
 
 from app.config import get_settings
+from controllers import health_controller
+from db.session import engine
 
 settings = get_settings()
 
@@ -28,17 +30,32 @@ logger = logging.getLogger(__name__)
 
 # ------------------------------------------------------------
 # Lifespan: hooks de arranque y parada
-# Aquí, en milestones futuros, conectaremos:
-#   - Pool de PostgreSQL (Milestone 2)
-#   - Modelo de embeddings (Milestone 4)
-#   - Cliente Ollama (Milestone 5)
 # ------------------------------------------------------------
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Hook de inicio/parada de la aplicación."""
+    """
+    Al arrancar: prueba la conexión a la BD (warning si falla, no aborta).
+    Al apagar: cierra el pool del engine para liberar conexiones.
+    """
     logger.info("Iniciando %s en modo %s", settings.app_name, settings.app_env)
+
+    # Smoke test de conexión a Postgres
+    try:
+        async with engine.connect() as conn:
+            await conn.execute(text("SELECT 1"))
+        logger.info("Conexión a PostgreSQL establecida correctamente")
+    except Exception as exc:
+        logger.warning(
+            "No se pudo conectar a la BD al arrancar: %s. "
+            "El backend levantará igual; los endpoints que requieran BD "
+            "fallarán hasta que la conexión esté disponible.",
+            exc,
+        )
+
     yield
-    logger.info("Apagando %s", settings.app_name)
+
+    logger.info("Apagando %s, cerrando pool de BD", settings.app_name)
+    await engine.dispose()
 
 
 # ------------------------------------------------------------
@@ -47,14 +64,14 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title=settings.app_name,
     description="Agente inteligente RAG sobre gastronomía colombiana.",
-    version="0.1.0",
+    version="0.2.0",
     debug=settings.debug,
     lifespan=lifespan,
 )
 
+
 # ------------------------------------------------------------
 # CORS
-# Se prepara aquí; en Milestone 6 se ajustará a la URL real del frontend.
 # ------------------------------------------------------------
 app.add_middleware(
     CORSMiddleware,
@@ -66,16 +83,17 @@ app.add_middleware(
 
 
 # ------------------------------------------------------------
+# Routers
+# ------------------------------------------------------------
+app.include_router(health_controller.router)
+
+
+# ------------------------------------------------------------
 # Endpoints base
 # ------------------------------------------------------------
 @app.get("/health", tags=["system"])
 async def health_check():
-    """
-    Health check público. Útil para:
-    - Validar que la app responde
-    - Health checks de Docker / load balancer
-    - Pruebas de despliegue
-    """
+    """Health check público (no toca BD)."""
     return {
         "status": "ok",
         "service": settings.app_name,

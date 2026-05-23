@@ -28,6 +28,9 @@ class Settings(BaseSettings):
     database_url: str = (
         "postgresql+asyncpg://agente_user:agente_password@postgres:5432/agente_db"
     )
+    db_pool_size: int = 10
+    db_max_overflow: int = 20
+    db_pool_pre_ping: bool = True
 
     # ------------------------------------------------------------
     # Ollama (Milestone 5+)

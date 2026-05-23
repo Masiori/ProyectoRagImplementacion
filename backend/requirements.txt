@@ -1,7 +1,6 @@
 # ============================================================
 # Backend - requirements.txt
-# Milestone 1: solo FastAPI base + settings
-# Las dependencias se agregarán incrementalmente en cada milestone.
+# Milestone 2: agregadas dependencias de BD (SQLAlchemy, Alembic, pgvector)
 # ============================================================
 
 # --- Framework web ---
@@ -13,13 +12,15 @@ pydantic==2.9.2
 pydantic-settings==2.6.1
 python-dotenv==1.0.1
 
+# --- Base de datos (Milestone 2) ---
+sqlalchemy[asyncio]==2.0.36
+asyncpg==0.30.0
+alembic==1.13.3
+pgvector==0.3.6
+greenlet==3.1.1   # Requerido por SQLAlchemy async
+
 # ============================================================
 # Próximos milestones (los iremos agregando):
-#
-# Milestone 2 (BD):
-#   sqlalchemy[asyncio]==2.0.36
-#   asyncpg==0.30.0
-#   alembic==1.13.3
 #
 # Milestone 3 (Auth Cognito):
 #   python-jose[cryptography]==3.3.0
@@ -33,7 +34,6 @@ python-dotenv==1.0.1
 #   pandas==2.2.3
 #   boto3==1.35.50
 #   python-multipart==0.0.12
-#   pgvector==0.3.6
 #
 # Milestone 5 (Agente):
 #   langchain==0.3.7
