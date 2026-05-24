@@ -1,9 +1,6 @@
 """
 Configuración centralizada de la aplicación.
 Lee variables de entorno desde el archivo .env (gracias a pydantic-settings).
-
-Las variables que aún no se usan en el Milestone 1 están comentadas;
-se irán habilitando en los milestones correspondientes.
 """
 
 from functools import lru_cache
@@ -23,7 +20,6 @@ class Settings(BaseSettings):
 
     # ------------------------------------------------------------
     # Base de datos (Milestone 2+)
-    # Por ahora la cargamos pero no la usamos.
     # ------------------------------------------------------------
     database_url: str = (
         "postgresql+asyncpg://agente_user:agente_password@postgres:5432/agente_db"
@@ -58,6 +54,27 @@ class Settings(BaseSettings):
     cognito_region: str = "us-east-1"
     cognito_user_pool_id: str = ""
     cognito_app_client_id: str = ""
+
+    @property
+    def cognito_issuer(self) -> str:
+        """
+        URL del issuer que aparece en el claim `iss` del JWT.
+        Formato: https://cognito-idp.{region}.amazonaws.com/{user_pool_id}
+        """
+        return (
+            f"https://cognito-idp.{self.cognito_region}.amazonaws.com/"
+            f"{self.cognito_user_pool_id}"
+        )
+
+    @property
+    def cognito_jwks_url(self) -> str:
+        """URL pública de las JWKS de Cognito (claves para verificar firma)."""
+        return f"{self.cognito_issuer}/.well-known/jwks.json"
+
+    @property
+    def cognito_is_configured(self) -> bool:
+        """True si las variables de Cognito están seteadas."""
+        return bool(self.cognito_user_pool_id and self.cognito_app_client_id)
 
     # ------------------------------------------------------------
     # AWS S3 (Milestone 4+)

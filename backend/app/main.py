@@ -1,23 +1,23 @@
+
 """
 Entrypoint de la aplicación FastAPI.
-
-Milestone 2: ahora hay conexión a Postgres y endpoints /health/db y
-/health/pgvector. El engine se prueba al arrancar y se cierra al apagar.
+ 
+Milestone 3: ahora registramos el router de autenticación (/me).
 """
-
+ 
 import logging
 from contextlib import asynccontextmanager
-
+ 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import text
-
+ 
 from app.config import get_settings
-from controllers import health_controller
+from controllers import auth_controller, health_controller
 from db.session import engine
-
+ 
 settings = get_settings()
-
+ 
 # ------------------------------------------------------------
 # Logging
 # ------------------------------------------------------------
@@ -26,8 +26,8 @@ logging.basicConfig(
     format="%(asctime)s | %(levelname)s | %(name)s | %(message)s",
 )
 logger = logging.getLogger(__name__)
-
-
+ 
+ 
 # ------------------------------------------------------------
 # Lifespan: hooks de arranque y parada
 # ------------------------------------------------------------
@@ -38,7 +38,7 @@ async def lifespan(app: FastAPI):
     Al apagar: cierra el pool del engine para liberar conexiones.
     """
     logger.info("Iniciando %s en modo %s", settings.app_name, settings.app_env)
-
+ 
     # Smoke test de conexión a Postgres
     try:
         async with engine.connect() as conn:
@@ -51,25 +51,33 @@ async def lifespan(app: FastAPI):
             "fallarán hasta que la conexión esté disponible.",
             exc,
         )
-
+ 
+    # Aviso si Cognito no está configurado
+    if not settings.cognito_is_configured:
+        logger.warning(
+            "Cognito NO está configurado (COGNITO_USER_POOL_ID y/o "
+            "COGNITO_APP_CLIENT_ID vacíos). Los endpoints protegidos "
+            "devolverán 503 hasta que se configuren."
+        )
+ 
     yield
-
+ 
     logger.info("Apagando %s, cerrando pool de BD", settings.app_name)
     await engine.dispose()
-
-
+ 
+ 
 # ------------------------------------------------------------
 # Instancia de FastAPI
 # ------------------------------------------------------------
 app = FastAPI(
     title=settings.app_name,
     description="Agente inteligente RAG sobre gastronomía colombiana.",
-    version="0.2.0",
+    version="0.3.0",
     debug=settings.debug,
     lifespan=lifespan,
 )
-
-
+ 
+ 
 # ------------------------------------------------------------
 # CORS
 # ------------------------------------------------------------
@@ -80,14 +88,15 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
-
+ 
+ 
 # ------------------------------------------------------------
 # Routers
 # ------------------------------------------------------------
 app.include_router(health_controller.router)
-
-
+app.include_router(auth_controller.router)
+ 
+ 
 # ------------------------------------------------------------
 # Endpoints base
 # ------------------------------------------------------------
@@ -100,8 +109,8 @@ async def health_check():
         "version": app.version,
         "environment": settings.app_env,
     }
-
-
+ 
+ 
 @app.get("/", tags=["system"])
 async def root():
     """Endpoint raíz informativo."""
@@ -110,3 +119,4 @@ async def root():
         "docs": "/docs",
         "health": "/health",
     }
+ 

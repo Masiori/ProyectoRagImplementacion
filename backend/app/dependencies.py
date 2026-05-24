@@ -1,31 +1,36 @@
+
 """
 Dependencias compartidas para FastAPI (DI).
-
-En el Milestone 2 solo expone `get_db`. En milestones siguientes se
-agregarán aquí:
-  - `get_current_user` (Milestone 3): valida JWT y devuelve User
-  - clientes de servicios externos (S3, embeddings, Ollama)
+ 
+Milestone 2 (existente):
+  - `get_db`: provee una `AsyncSession` por request.
+ 
+Milestone 3 (nuevo):
+  - `get_current_user`: extrae JWT, valida, obtiene/crea User.
 """
-
-from typing import AsyncGenerator
-
+ 
+from typing import AsyncGenerator, Optional
+ 
+from fastapi import Depends, HTTPException, status
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.ext.asyncio import AsyncSession
-
+ 
 from db.session import AsyncSessionLocal
-
-
+from models.user import User
+from services.auth_service import verify_token
+from services.user_service import get_or_create_user
+ 
+ 
+# ============================================================
+# DB session
+# ============================================================
 async def get_db() -> AsyncGenerator[AsyncSession, None]:
     """
     Dependencia que provee una `AsyncSession` por request.
-
+ 
     - Commit explícito si no hubo excepción.
     - Rollback automático si la excepción burbujeó al endpoint.
     - Cierre garantizado al final del request.
-
-    Uso en un endpoint:
-        @router.get("/items")
-        async def list_items(db: AsyncSession = Depends(get_db)):
-            ...
     """
     async with AsyncSessionLocal() as session:
         try:
@@ -36,3 +41,45 @@ async def get_db() -> AsyncGenerator[AsyncSession, None]:
             raise
         finally:
             await session.close()
+ 
+ 
+# ============================================================
+# Autenticación
+# ============================================================
+# `auto_error=False`: si falta el header, FastAPI no lanza 403 automático.
+# Nosotros decidimos: lanzamos 401 (más correcto semánticamente).
+bearer_scheme = HTTPBearer(auto_error=False, bearerFormat="JWT")
+ 
+ 
+async def get_current_user(
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(bearer_scheme),
+    db: AsyncSession = Depends(get_db),
+) -> User:
+    """
+    Dependencia que devuelve el `User` autenticado.
+ 
+    Flujo:
+      1. Extrae el bearer token del header Authorization.
+      2. Valida el JWT (firma + claims) contra Cognito.
+      3. Obtiene/crea el User en BD.
+ 
+    Cualquier fallo → 401.
+ 
+    Uso en un endpoint:
+        @router.get("/protegido")
+        async def protegido(user: User = Depends(get_current_user)):
+            return {"user_id": user.id}
+    """
+    if credentials is None or credentials.scheme.lower() != "bearer":
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Falta el header Authorization: Bearer <token>.",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+ 
+    # Valida el JWT y devuelve los claims (lanza 401 si falla)
+    claims = await verify_token(credentials.credentials)
+ 
+    # Busca o crea el usuario en la BD
+    user = await get_or_create_user(db, claims)
+    return user
