@@ -41,12 +41,28 @@ class Settings(BaseSettings):
     embedding_dimension: int = 384
 
     # ------------------------------------------------------------
-    # RAG (Milestone 5+)
+    # RAG / Chunking (Milestone 4+ y 5+)
     # ------------------------------------------------------------
     similarity_threshold: float = 0.70
     top_k: int = 5
     chunk_size: int = 800
     chunk_overlap: int = 150
+
+    # ------------------------------------------------------------
+    # Upload de documentos (Milestone 4+)
+    # ------------------------------------------------------------
+    max_upload_size_bytes: int = 20_971_520    # 20 MB
+    allowed_mime_types: str = (
+        "application/pdf,"
+        "text/plain,"
+        "text/markdown,"
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    )
+
+    @property
+    def allowed_mime_types_list(self) -> list[str]:
+        """Lista parseada de MIME types permitidos para upload."""
+        return [m.strip() for m in self.allowed_mime_types.split(",") if m.strip()]
 
     # ------------------------------------------------------------
     # AWS Cognito (Milestone 3+)
@@ -57,10 +73,6 @@ class Settings(BaseSettings):
 
     @property
     def cognito_issuer(self) -> str:
-        """
-        URL del issuer que aparece en el claim `iss` del JWT.
-        Formato: https://cognito-idp.{region}.amazonaws.com/{user_pool_id}
-        """
         return (
             f"https://cognito-idp.{self.cognito_region}.amazonaws.com/"
             f"{self.cognito_user_pool_id}"
@@ -68,12 +80,10 @@ class Settings(BaseSettings):
 
     @property
     def cognito_jwks_url(self) -> str:
-        """URL pública de las JWKS de Cognito (claves para verificar firma)."""
         return f"{self.cognito_issuer}/.well-known/jwks.json"
 
     @property
     def cognito_is_configured(self) -> bool:
-        """True si las variables de Cognito están seteadas."""
         return bool(self.cognito_user_pool_id and self.cognito_app_client_id)
 
     # ------------------------------------------------------------
@@ -84,6 +94,15 @@ class Settings(BaseSettings):
     aws_access_key_id: str = ""
     aws_secret_access_key: str = ""
 
+    @property
+    def s3_is_configured(self) -> bool:
+        """True si las credenciales y bucket están seteados."""
+        return bool(
+            self.aws_s3_bucket
+            and self.aws_access_key_id
+            and self.aws_secret_access_key
+        )
+
     # ------------------------------------------------------------
     # CORS (Milestone 6+)
     # ------------------------------------------------------------
@@ -91,8 +110,7 @@ class Settings(BaseSettings):
 
     @property
     def cors_origins_list(self) -> list[str]:
-        """Convierte la cadena separada por comas en una lista."""
-        return [origin.strip() for origin in self.cors_origins.split(",") if origin.strip()]
+        return [o.strip() for o in self.cors_origins.split(",") if o.strip()]
 
     model_config = SettingsConfigDict(
         env_file=".env",
@@ -104,8 +122,5 @@ class Settings(BaseSettings):
 
 @lru_cache
 def get_settings() -> Settings:
-    """
-    Devuelve la instancia única de settings.
-    El @lru_cache garantiza que .env se lee una sola vez.
-    """
+    """Devuelve la instancia única de settings."""
     return Settings()

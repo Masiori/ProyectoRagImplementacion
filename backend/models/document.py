@@ -8,9 +8,9 @@ S3 (`s3_key`) y sus chunks vectorizados viven en la tabla `chunks`.
 
 import uuid
 from enum import Enum as PyEnum
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Optional
 
-from sqlalchemy import BigInteger, Enum as SQLEnum, ForeignKey, String
+from sqlalchemy import BigInteger, Enum as SQLEnum, ForeignKey, String, Text
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -25,10 +25,10 @@ if TYPE_CHECKING:
 class DocumentStatus(str, PyEnum):
     """Ciclo de vida de un documento."""
 
-    PENDING = "pending"          # Recién creado, aún sin procesar
-    PROCESSING = "processing"    # Extrayendo texto y generando embeddings
-    READY = "ready"              # Disponible para retrieval
-    FAILED = "failed"            # Ocurrió un error en el pipeline
+    PENDING = "pending"
+    PROCESSING = "processing"
+    READY = "ready"
+    FAILED = "failed"
 
 
 class Document(Base, UUIDMixin, TimestampMixin):
@@ -36,10 +36,6 @@ class Document(Base, UUIDMixin, TimestampMixin):
 
     __tablename__ = "documents"
 
-    # ------------------------------------------------------------
-    # FK al usuario propietario
-    # RESTRICT: si el usuario tiene documentos, no se permite borrarlo.
-    # ------------------------------------------------------------
     user_id: Mapped[uuid.UUID] = mapped_column(
         PG_UUID(as_uuid=True),
         ForeignKey("users.id", ondelete="RESTRICT"),
@@ -47,9 +43,6 @@ class Document(Base, UUIDMixin, TimestampMixin):
         index=True,
     )
 
-    # ------------------------------------------------------------
-    # Metadatos del archivo
-    # ------------------------------------------------------------
     filename: Mapped[str] = mapped_column(String(512), nullable=False)
     s3_key: Mapped[str] = mapped_column(
         String(1024),
@@ -59,13 +52,6 @@ class Document(Base, UUIDMixin, TimestampMixin):
     mime_type: Mapped[str] = mapped_column(String(100), nullable=False)
     size_bytes: Mapped[int] = mapped_column(BigInteger, nullable=False)
 
-    # ------------------------------------------------------------
-    # Estado
-    # ------------------------------------------------------------
-    # IMPORTANTE: `values_callable` fuerza a SQLAlchemy a usar los .value
-    # (minúscula) como valores del enum en PostgreSQL, en lugar de los
-    # nombres de los miembros (PENDING, PROCESSING, ...). Sin esto,
-    # el DEFAULT 'pending' no concuerda con el enum 'PENDING' y falla.
     status: Mapped[DocumentStatus] = mapped_column(
         SQLEnum(
             DocumentStatus,
@@ -80,13 +66,17 @@ class Document(Base, UUIDMixin, TimestampMixin):
     )
 
     # ------------------------------------------------------------
+    # Mensaje de error (solo cuando status='failed')
+    # ------------------------------------------------------------
+    # Texto descriptivo del fallo durante el procesamiento.
+    # NULL en cualquier otro estado.
+    error_message: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+
+    # ------------------------------------------------------------
     # Relaciones
     # ------------------------------------------------------------
     user: Mapped["User"] = relationship(back_populates="documents")
 
-    # Document → Chunk: CASCADE. Al borrar el documento, sus chunks
-    # se borran en la BD. `passive_deletes=True` le dice al ORM que
-    # no haga el delete por su lado (lo hace Postgres).
     chunks: Mapped[list["Chunk"]] = relationship(
         back_populates="document",
         cascade="all, delete-orphan",

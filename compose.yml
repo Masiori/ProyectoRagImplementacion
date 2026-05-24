@@ -1,7 +1,6 @@
 services:
   # ============================================================
   # PostgreSQL 16 con extensión pgvector
-  # En producción esto se reemplaza por AWS RDS PostgreSQL
   # ============================================================
   postgres:
     image: pgvector/pgvector:pg16
@@ -26,7 +25,6 @@ services:
 
   # ============================================================
   # Ollama - LLM local
-  # Para usarlo: docker exec -it agente-ollama ollama pull llama3.2:3b
   # ============================================================
   ollama:
     image: ollama/ollama:latest
@@ -38,18 +36,11 @@ services:
       - ollama_data:/root/.ollama
     networks:
       - agente-net
-    # Si tienes GPU NVIDIA disponible, descomenta este bloque:
-    # deploy:
-    #   resources:
-    #     reservations:
-    #       devices:
-    #         - driver: nvidia
-    #           count: all
-    #           capabilities: [gpu]
 
   # ============================================================
   # Backend FastAPI
-  # En Milestone 1 solo expone /health; se irá expandiendo.
+  # Milestone 4: nuevo volumen `huggingface_cache` para los pesos
+  # del modelo de embeddings (~120 MB), persistidos entre rebuilds.
   # ============================================================
   backend:
     build:
@@ -62,9 +53,10 @@ services:
     env_file:
       - .env
     environment:
-      # Sobrescribe DATABASE_URL para usar el hostname del servicio Docker
       DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-agente_user}:${POSTGRES_PASSWORD:-agente_password}@postgres:5432/${POSTGRES_DB:-agente_db}
       OLLAMA_BASE_URL: http://ollama:11434
+      # Apuntamos HuggingFace al volumen persistente
+      HF_HOME: /root/.cache/huggingface
     depends_on:
       postgres:
         condition: service_healthy
@@ -72,6 +64,7 @@ services:
         condition: service_started
     volumes:
       - ./backend:/app
+      - huggingface_cache:/root/.cache/huggingface
     networks:
       - agente-net
 
@@ -79,6 +72,8 @@ volumes:
   postgres_data:
     driver: local
   ollama_data:
+    driver: local
+  huggingface_cache:
     driver: local
 
 networks:
