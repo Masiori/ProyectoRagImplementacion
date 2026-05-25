@@ -1,12 +1,12 @@
 # ============================================================
 # Backend - requirements.txt
-# Milestone 4: procesamiento de documentos + embeddings
+# Milestone 5: agregadas dependencias del agente LangChain/LangGraph + Ollama
 # ============================================================
 
 # --- Framework web ---
 fastapi==0.115.4
 uvicorn[standard]==0.32.0
-python-multipart==0.0.12         # Para UploadFile / multipart en FastAPI
+python-multipart==0.0.12
 
 # --- Validación y configuración ---
 pydantic==2.9.2
@@ -25,18 +25,14 @@ python-jose[cryptography]==3.3.0
 httpx==0.27.2
 
 # --- Procesamiento de documentos (Milestone 4) ---
-boto3==1.35.50                   # Cliente AWS S3
-pdfplumber==0.11.4               # Extracción de PDF (mejor calidad que pypdf)
-python-docx==1.1.2               # Extracción de DOCX
-langchain-text-splitters==0.3.2  # RecursiveCharacterTextSplitter
-sentence-transformers==3.2.1     # Modelo de embeddings (multilingual-e5-small)
+boto3==1.35.50
+pdfplumber==0.11.4
+python-docx==1.1.2
+langchain-text-splitters==0.3.2
+sentence-transformers==3.2.1
 
-# ============================================================
-# Próximo milestone:
-#
-# Milestone 5 (Agente):
-#   langchain==0.3.7
-#   langchain-community==0.3.5
-#   langchain-ollama==0.2.0
-#   langgraph==0.2.45
-# ============================================================
+# --- Agente LangChain + LangGraph + Ollama (Milestone 5) ---
+langchain==0.3.7
+langchain-core==0.3.15
+langgraph==0.2.45
+langchain-ollama==0.2.0

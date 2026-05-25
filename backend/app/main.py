@@ -1,8 +1,8 @@
 """
 Entrypoint de la aplicación FastAPI.
 
-Milestone 4: cargamos el modelo de embeddings en el lifespan y queda
-disponible en `app.state.embedding_service` para todos los requests.
+Milestone 5: cargamos el LLMService (cliente Ollama) en el lifespan y
+registramos el router de chat.
 """
 
 import logging
@@ -13,9 +13,15 @@ from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import text
 
 from app.config import get_settings
-from controllers import auth_controller, documents_controller, health_controller
+from controllers import (
+    auth_controller,
+    chat_controller,
+    documents_controller,
+    health_controller,
+)
 from db.session import engine
 from services.embedding_service import EmbeddingService
+from services.llm_service import LLMService
 
 settings = get_settings()
 
@@ -30,14 +36,15 @@ logger = logging.getLogger(__name__)
 
 
 # ------------------------------------------------------------
-# Lifespan: hooks de arranque y parada
+# Lifespan
 # ------------------------------------------------------------
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """
     Al arrancar:
-      - Smoke test de conexión a Postgres.
-      - Carga del modelo de embeddings (~120 MB, queda en memoria).
+      - Smoke test de BD.
+      - Carga del modelo de embeddings (~120 MB).
+      - Inicialización del cliente Ollama.
     Al apagar:
       - Cierre del pool de BD.
     """
@@ -55,14 +62,14 @@ async def lifespan(app: FastAPI):
             exc,
         )
 
-    # --- Cognito (info) ---
+    # --- Cognito ---
     if not settings.cognito_is_configured:
         logger.warning(
             "Cognito NO está configurado. Los endpoints protegidos "
             "devolverán 503 hasta que se configuren las variables COGNITO_*."
         )
 
-    # --- S3 (info) ---
+    # --- S3 ---
     if not settings.s3_is_configured:
         logger.warning(
             "S3 NO está configurado. Las cargas y borrados de documentos "
@@ -76,10 +83,14 @@ async def lifespan(app: FastAPI):
     except Exception as exc:
         logger.exception("Error cargando el modelo de embeddings: %s", exc)
         app.state.embedding_service = None
-        logger.warning(
-            "El backend levantará sin embeddings; los endpoints de "
-            "documentos devolverán 503 hasta que el modelo cargue."
-        )
+
+    # --- Cliente LLM (Ollama) ---
+    try:
+        logger.info("Inicializando cliente Ollama...")
+        app.state.llm_service = LLMService()
+    except Exception as exc:
+        logger.exception("Error inicializando el cliente Ollama: %s", exc)
+        app.state.llm_service = None
 
     yield
 
@@ -93,7 +104,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title=settings.app_name,
     description="Agente inteligente RAG sobre gastronomía colombiana.",
-    version="0.4.0",
+    version="0.5.0",
     debug=settings.debug,
     lifespan=lifespan,
 )
@@ -117,6 +128,7 @@ app.add_middleware(
 app.include_router(health_controller.router)
 app.include_router(auth_controller.router)
 app.include_router(documents_controller.router)
+app.include_router(chat_controller.router)
 
 
 # ------------------------------------------------------------

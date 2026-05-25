@@ -33,6 +33,7 @@ class Settings(BaseSettings):
     # ------------------------------------------------------------
     ollama_base_url: str = "http://ollama:11434"
     ollama_model: str = "llama3.2:3b"
+    ollama_timeout_seconds: int = 60                # Configurable
 
     # ------------------------------------------------------------
     # Embeddings (Milestone 4+)
@@ -49,9 +50,15 @@ class Settings(BaseSettings):
     chunk_overlap: int = 150
 
     # ------------------------------------------------------------
+    # Chat (Milestone 5+)
+    # ------------------------------------------------------------
+    history_max_messages: int = 6                   # Últimos N mensajes en el prompt
+    max_question_length: int = 800                  # Longitud máx. de pregunta (chars)
+
+    # ------------------------------------------------------------
     # Upload de documentos (Milestone 4+)
     # ------------------------------------------------------------
-    max_upload_size_bytes: int = 20_971_520    # 20 MB
+    max_upload_size_bytes: int = 20_971_520
     allowed_mime_types: str = (
         "application/pdf,"
         "text/plain,"
@@ -61,7 +68,6 @@ class Settings(BaseSettings):
 
     @property
     def allowed_mime_types_list(self) -> list[str]:
-        """Lista parseada de MIME types permitidos para upload."""
         return [m.strip() for m in self.allowed_mime_types.split(",") if m.strip()]
 
     # ------------------------------------------------------------
@@ -96,7 +102,6 @@ class Settings(BaseSettings):
 
     @property
     def s3_is_configured(self) -> bool:
-        """True si las credenciales y bucket están seteados."""
         return bool(
             self.aws_s3_bucket
             and self.aws_access_key_id
@@ -122,5 +127,4 @@ class Settings(BaseSettings):
 
 @lru_cache
 def get_settings() -> Settings:
-    """Devuelve la instancia única de settings."""
     return Settings()

@@ -4,13 +4,15 @@ Controlador de health checks de infraestructura.
 Endpoints:
   GET /health/db        → confirma conexión a Postgres
   GET /health/pgvector  → confirma que la extensión vector está instalada
+  GET /health/ollama    → confirma que Ollama responde y el modelo está cargado
 """
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.dependencies import get_db
+from app.dependencies import get_db, get_llm_service
+from services.llm_service import LLMError, LLMService
 
 router = APIRouter(prefix="/health", tags=["system"])
 
@@ -44,10 +46,7 @@ async def health_pgvector(db: AsyncSession = Depends(get_db)) -> dict:
         if version is None:
             raise HTTPException(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                detail={
-                    "status": "error",
-                    "pgvector": "not_installed",
-                },
+                detail={"status": "error", "pgvector": "not_installed"},
             )
         return {"status": "ok", "pgvector_version": version}
     except HTTPException:
@@ -60,4 +59,27 @@ async def health_pgvector(db: AsyncSession = Depends(get_db)) -> dict:
                 "pgvector": "unknown",
                 "error": str(exc),
             },
+        )
+
+
+@router.get("/ollama")
+async def health_ollama(
+    llm_service: LLMService = Depends(get_llm_service),
+) -> dict:
+    """
+    Verifica que Ollama responde y que el modelo configurado está cargado.
+
+    Devuelve:
+        - 200 + info del servicio si todo OK
+        - 503 si Ollama no responde
+        - 200 con `model_loaded=false` si responde pero el modelo no está
+          (sin lanzar excepción: facilita el diagnóstico)
+    """
+    try:
+        info = await llm_service.health_check()
+        return {"status": "ok", **info}
+    except LLMError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail={"status": "error", "error": str(exc)},
         )

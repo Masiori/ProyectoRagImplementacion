@@ -1,15 +1,10 @@
 """
 Dependencias compartidas para FastAPI (DI).
 
-Milestone 2 (existente):
-  - `get_db`: provee una `AsyncSession` por request.
-
-Milestone 3 (existente):
-  - `get_current_user`: extrae JWT, valida, obtiene/crea User.
-
-Milestone 4 (nuevo):
-  - `get_embedding_service`: devuelve la instancia singleton del modelo
-    de embeddings cargada en el lifespan.
+Milestone 2: `get_db`
+Milestone 3: `get_current_user`
+Milestone 4: `get_embedding_service`
+Milestone 5: `get_llm_service`
 """
 
 from typing import AsyncGenerator, Optional
@@ -22,6 +17,7 @@ from db.session import AsyncSessionLocal
 from models.user import User
 from services.auth_service import verify_token
 from services.embedding_service import EmbeddingService
+from services.llm_service import LLMService
 from services.user_service import get_or_create_user
 
 
@@ -68,12 +64,7 @@ async def get_current_user(
 # Embedding service (singleton vía app.state)
 # ============================================================
 def get_embedding_service(request: Request) -> EmbeddingService:
-    """
-    Devuelve la instancia única del modelo de embeddings, cargada
-    en `lifespan` y guardada en `app.state.embedding_service`.
-
-    Si por algún motivo no está disponible, devolvemos 503.
-    """
+    """Devuelve la instancia única del modelo de embeddings."""
     service: Optional[EmbeddingService] = getattr(
         request.app.state, "embedding_service", None
     )
@@ -81,5 +72,24 @@ def get_embedding_service(request: Request) -> EmbeddingService:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="El servicio de embeddings no está disponible.",
+        )
+    return service
+
+
+# ============================================================
+# LLM service (singleton vía app.state)
+# ============================================================
+def get_llm_service(request: Request) -> LLMService:
+    """
+    Devuelve la instancia única del cliente Ollama, creada en lifespan
+    y guardada en `app.state.llm_service`.
+    """
+    service: Optional[LLMService] = getattr(
+        request.app.state, "llm_service", None
+    )
+    if service is None:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="El servicio LLM no está disponible.",
         )
     return service
