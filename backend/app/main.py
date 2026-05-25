@@ -6,8 +6,12 @@ registramos el router de chat.
 """
 
 import logging
+import asyncio
 from contextlib import asynccontextmanager
+from pathlib import Path
 
+from alembic import command
+from alembic.config import Config
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import text
@@ -35,6 +39,19 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
+def run_database_migrations() -> None:
+    """Aplica las migraciones pendientes antes de aceptar tráfico."""
+    alembic_ini = Path(__file__).resolve().parents[1] / "alembic.ini"
+    config = Config(str(alembic_ini))
+    logger.info("Aplicando migraciones Alembic...")
+    try:
+        command.upgrade(config, "head")
+        logger.info("Migraciones Alembic aplicadas correctamente")
+    except Exception:
+        logger.exception("Error aplicando migraciones Alembic")
+        raise
+
+
 # ------------------------------------------------------------
 # Lifespan
 # ------------------------------------------------------------
@@ -42,6 +59,7 @@ logger = logging.getLogger(__name__)
 async def lifespan(app: FastAPI):
     """
     Al arrancar:
+    - Aplicamos migraciones pendientes.
       - Smoke test de BD.
       - Carga del modelo de embeddings (~120 MB).
       - Inicialización del cliente Ollama.
@@ -49,6 +67,15 @@ async def lifespan(app: FastAPI):
       - Cierre del pool de BD.
     """
     logger.info("Iniciando %s en modo %s", settings.app_name, settings.app_env)
+
+    # --- Migraciones ---
+    try:
+        logger.info("Aplicando migraciones de base de datos...")
+        await asyncio.to_thread(run_database_migrations)
+        logger.info("Migraciones de base de datos aplicadas correctamente")
+    except Exception as exc:
+        logger.exception("Error aplicando migraciones de base de datos: %s", exc)
+        raise
 
     # --- BD ---
     try:
