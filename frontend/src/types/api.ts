@@ -25,3 +25,25 @@ export interface CognitoTokenResponse {
   expires_in: number;
   token_type: string;
 }
+
+// ============================================================
+// Documentos (M6.3)
+// ============================================================
+export type DocumentStatus = "pending" | "processing" | "ready" | "failed";
+
+export interface DocumentResponse {
+  id: string;
+  filename: string;
+  mime_type: string;
+  size_bytes: number;
+  status: DocumentStatus;
+  error_message: string | null;
+  chunks_count: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface DocumentDetailResponse extends DocumentResponse {
+  s3_key: string;
+  user_id: string;
+}
