@@ -19,6 +19,7 @@ export function App() {
         <Route element={<PrivateRoute />}>
           <Route path="/" element={<Navigate to="/chat" replace />} />
           <Route path="/chat" element={<ChatPage />} />
+          <Route path="/chat/:conversationId" element={<ChatPage />} />
           <Route path="/documents" element={<DocumentsPage />} />
         </Route>
       </Route>
